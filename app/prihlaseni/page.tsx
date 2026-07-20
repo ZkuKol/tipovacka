@@ -3,23 +3,17 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-export default function Registrace() {
-  const [prezdivka, setPrezdivka] = useState("");
+export default function Prihlaseni() {
   const [email, setEmail] = useState("");
   const [heslo, setHeslo] = useState("");
   const [zobrazitHeslo, setZobrazitHeslo] = useState(false);
 
-  async function registrace(e: React.FormEvent) {
+  async function prihlaseni(e: React.FormEvent) {
     e.preventDefault();
 
-    const { error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password: heslo,
-      options: {
-        data: {
-          prezdivka,
-        },
-      },
     });
 
     if (error) {
@@ -27,33 +21,23 @@ export default function Registrace() {
       return;
     }
 
-    alert("Registrace proběhla. Zkontroluj e-mail a potvrď účet.");
+    alert("Přihlášení proběhlo úspěšně!");
   }
 
   return (
     <main className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8">
         <h1 className="text-3xl font-bold text-center mb-8">
-          Registrace
+          Přihlášení
         </h1>
 
-        <form onSubmit={registrace}>
-          <input
-            type="text"
-            placeholder="Přezdívka"
-            value={prezdivka}
-            onChange={(e) => setPrezdivka(e.target.value)}
-            className="w-full border rounded-lg p-3 mb-4"
-            required
-          />
-
+        <form onSubmit={prihlaseni}>
           <input
             type="email"
             placeholder="E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full border rounded-lg p-3 mb-4"
-            required
           />
 
           <div className="relative mb-6">
@@ -63,7 +47,6 @@ export default function Registrace() {
               value={heslo}
               onChange={(e) => setHeslo(e.target.value)}
               className="w-full border rounded-lg p-3 pr-24"
-              required
             />
 
             <button
@@ -79,7 +62,7 @@ export default function Registrace() {
             type="submit"
             className="w-full bg-blue-700 text-white rounded-lg p-3"
           >
-            Vytvořit účet
+            Přihlásit se
           </button>
         </form>
       </div>

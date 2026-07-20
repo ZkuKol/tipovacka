@@ -1,4 +1,6 @@
+import LoginForm from "@/components/LoginForm";
 import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-gray-100">
@@ -8,21 +10,24 @@ export default function Home() {
 
       <div className="max-w-md mx-auto mt-12 bg-white rounded-xl shadow-lg p-8">
         <h2 className="text-2xl font-bold text-center mb-8">
-          Název soutěže
+          Přihlášení
         </h2>
 
-        <button className="w-full bg-blue-700 text-white py-3 rounded-lg mb-4 hover:bg-blue-800">
-          Přihlásit se
-        </button>
+        <LoginForm />
 
-        <Link href="/registrace">
-  <button className="w-full bg-gray-200 py-3 rounded-lg hover:bg-gray-300">
-    Registrovat se
-  </button>
-</Link>
+        <div className="mt-6 text-center">
+          <p className="text-gray-600 mb-2">
+            Nemáš účet?
+          </p>
+
+          <Link
+            href="/registrace"
+            className="text-blue-700 hover:underline font-semibold"
+          >
+            Registrovat se
+          </Link>
+        </div>
       </div>
     </main>
   );
 }
-
-
