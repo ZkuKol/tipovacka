@@ -1,39 +1,73 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 
-export default function Registrace() {
+export default function RegistracePage() {
+  const router = useRouter();
+
   const [prezdivka, setPrezdivka] = useState("");
   const [email, setEmail] = useState("");
   const [heslo, setHeslo] = useState("");
   const [zobrazitHeslo, setZobrazitHeslo] = useState(false);
+  const [registruji, setRegistruji] = useState(false);
+  const [chyba, setChyba] = useState("");
+  const [uspech, setUspech] = useState("");
 
-  async function registrace(e: React.FormEvent) {
+  async function registrace(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const { error } = await supabase.auth.signUp({
+    setRegistruji(true);
+    setChyba("");
+    setUspech("");
+
+    if (heslo.length < 6) {
+      setChyba("Heslo musí mít alespoň 6 znaků.");
+      setRegistruji(false);
+      return;
+    }
+
+    const supabase = createClient();
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password: heslo,
       options: {
         data: {
-          prezdivka,
+          nickname: prezdivka,
         },
+        emailRedirectTo: `${window.location.origin}/prihlaseni`,
       },
     });
 
     if (error) {
-      alert(error.message);
+      setChyba(error.message);
+      setRegistruji(false);
       return;
     }
 
-    alert("Registrace proběhla. Zkontroluj e-mail a potvrď účet.");
+    if (data.session) {
+      router.replace("/souteze");
+      router.refresh();
+      return;
+    }
+
+    setUspech(
+      "Registrace proběhla úspěšně. Zkontroluj e-mail a potvrď svůj účet."
+    );
+
+    setPrezdivka("");
+    setEmail("");
+    setHeslo("");
+    setRegistruji(false);
   }
 
   return (
     <main className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center mb-8">
+      <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow-lg">
+        <h1 className="mb-8 text-center text-3xl font-bold">
           Registrace
         </h1>
 
@@ -43,8 +77,9 @@ export default function Registrace() {
             placeholder="Přezdívka"
             value={prezdivka}
             onChange={(e) => setPrezdivka(e.target.value)}
-            className="w-full border rounded-lg p-3 mb-4"
             required
+            autoComplete="nickname"
+            className="mb-4 w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-700"
           />
 
           <input
@@ -52,8 +87,9 @@ export default function Registrace() {
             placeholder="E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full border rounded-lg p-3 mb-4"
             required
+            autoComplete="email"
+            className="mb-4 w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-700"
           />
 
           <div className="relative mb-6">
@@ -62,26 +98,51 @@ export default function Registrace() {
               placeholder="Heslo"
               value={heslo}
               onChange={(e) => setHeslo(e.target.value)}
-              className="w-full border rounded-lg p-3 pr-24"
               required
+              minLength={6}
+              autoComplete="new-password"
+              className="w-full rounded-lg border border-gray-300 p-3 pr-24 outline-none focus:border-blue-700"
             />
 
             <button
               type="button"
-              onClick={() => setZobrazitHeslo(!zobrazitHeslo)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm"
+              onClick={() => setZobrazitHeslo((stav) => !stav)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-600 hover:text-gray-900"
             >
               {zobrazitHeslo ? "Skrýt" : "Zobrazit"}
             </button>
           </div>
 
+          {chyba && (
+            <div className="mb-4 rounded-lg bg-red-100 p-3 text-sm text-red-700">
+              {chyba}
+            </div>
+          )}
+
+          {uspech && (
+            <div className="mb-4 rounded-lg bg-green-100 p-3 text-sm text-green-700">
+              {uspech}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-blue-700 text-white rounded-lg p-3"
+            disabled={registruji}
+            className="w-full rounded-lg bg-blue-700 p-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Vytvořit účet
+            {registruji ? "Registruji…" : "Zaregistrovat se"}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-gray-600">
+          Už máš účet?{" "}
+          <Link
+            href="/prihlaseni"
+            className="font-semibold text-blue-700 hover:underline"
+          >
+            Přihlásit se
+          </Link>
+        </p>
       </div>
     </main>
   );

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -10,9 +10,16 @@ export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [heslo, setHeslo] = useState("");
   const [zobrazitHeslo, setZobrazitHeslo] = useState(false);
+  const [prihlasuji, setPrihlasuji] = useState(false);
+  const [chyba, setChyba] = useState("");
 
-  async function prihlaseni(e: React.FormEvent) {
+  async function prihlaseni(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    setPrihlasuji(true);
+    setChyba("");
+
+    const supabase = createClient();
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -20,11 +27,13 @@ export default function LoginForm() {
     });
 
     if (error) {
-      alert(error.message);
+      setChyba("Neplatný e-mail nebo heslo.");
+      setPrihlasuji(false);
       return;
     }
 
-    router.push("/dashboard");
+    router.replace("/souteze");
+    router.refresh();
   }
 
   return (
@@ -34,8 +43,9 @@ export default function LoginForm() {
         placeholder="E-mail"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full border rounded-lg p-3 mb-4"
         required
+        autoComplete="email"
+        className="mb-4 w-full rounded-lg border border-gray-300 p-3 outline-none focus:border-blue-700"
       />
 
       <div className="relative mb-6">
@@ -44,24 +54,32 @@ export default function LoginForm() {
           placeholder="Heslo"
           value={heslo}
           onChange={(e) => setHeslo(e.target.value)}
-          className="w-full border rounded-lg p-3 pr-24"
           required
+          autoComplete="current-password"
+          className="w-full rounded-lg border border-gray-300 p-3 pr-24 outline-none focus:border-blue-700"
         />
 
         <button
           type="button"
-          onClick={() => setZobrazitHeslo(!zobrazitHeslo)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-sm"
+          onClick={() => setZobrazitHeslo((stav) => !stav)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-600 hover:text-gray-900"
         >
           {zobrazitHeslo ? "Skrýt" : "Zobrazit"}
         </button>
       </div>
 
+      {chyba && (
+        <div className="mb-4 rounded-lg bg-red-100 p-3 text-sm text-red-700">
+          {chyba}
+        </div>
+      )}
+
       <button
         type="submit"
-        className="w-full bg-blue-700 text-white rounded-lg p-3"
+        disabled={prihlasuji}
+        className="w-full rounded-lg bg-blue-700 p-3 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Přihlásit se
+        {prihlasuji ? "Přihlašuji…" : "Přihlásit se"}
       </button>
     </form>
   );
