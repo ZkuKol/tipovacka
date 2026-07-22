@@ -1,6 +1,5 @@
-import Header from "@/components/Header";
 import { createClient } from "@/lib/supabase/server";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 type CompetitionDetailPageProps = {
   params: Promise<{
@@ -14,17 +13,18 @@ export default async function CompetitionDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/prihlaseni");
-  }
-
   const { data: competition, error } = await supabase
     .from("competitions")
-    .select("*")
+    .select(
+      `
+        id,
+        deadline,
+        paid,
+        pending_tips,
+        ranking,
+        total_players
+      `
+    )
     .eq("id", id)
     .single();
 
@@ -32,30 +32,55 @@ export default async function CompetitionDetailPage({
     notFound();
   }
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <Header />
+  const deadline = competition.deadline
+    ? new Date(competition.deadline).toLocaleString("cs-CZ")
+    : "Bez termínu";
 
-      <main className="mx-auto max-w-7xl px-6 py-6">
-        <p className="mb-2 text-sm font-semibold text-orange-600">
-          {competition.sport}
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-gray-500">
+          Čekající tipy
         </p>
 
-        <h1 className="text-3xl font-bold text-gray-900">
-          {competition.title}
-        </h1>
+        <p className="mt-2 text-3xl font-bold text-gray-900">
+          {competition.pending_tips}
+        </p>
+      </div>
 
-        <div className="mt-6 rounded-2xl bg-white p-8 shadow-sm">
-          <p className="text-gray-600">
-            Sem přijde přehled soutěže, zápasy, tipování, tabulka a
-            účastníci.
-          </p>
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-gray-500">
+          Aktuální pořadí
+        </p>
 
-          <p className="mt-4 text-sm text-gray-400">
-            ID soutěže: {competition.id}
-          </p>
-        </div>
-      </main>
+        <p className="mt-2 text-3xl font-bold text-gray-900">
+          {competition.ranking}. / {competition.total_players}
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-gray-500">
+          Nejbližší uzávěrka
+        </p>
+
+        <p className="mt-2 text-lg font-bold text-gray-900">
+          {deadline}
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <p className="text-sm font-medium text-gray-500">
+          Platba
+        </p>
+
+        <p
+          className={`mt-2 text-2xl font-bold ${
+            competition.paid ? "text-green-600" : "text-red-600"
+          }`}
+        >
+          {competition.paid ? "Zaplaceno" : "Nezaplaceno"}
+        </p>
+      </div>
     </div>
   );
 }
