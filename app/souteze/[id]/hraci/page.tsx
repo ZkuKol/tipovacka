@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import DeletePlayerButton from "./DeletePlayerButton";
 
 type PlayersPageProps = {
   params: Promise<{
@@ -17,7 +18,7 @@ type CompetitionMember = {
   profiles: {
     id: string;
     nickname: string | null;
-  }[];
+  } | null;
 };
 
 export default async function PlayersPage({ params }: PlayersPageProps) {
@@ -110,47 +111,87 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
                   <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Přidán
                   </th>
+
+                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Akce
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-200 bg-white">
                 {members.map((member) => {
-                  const profile = member.profiles[0];
+                  const playerName =
+                    member.profiles?.nickname || "Bez přezdívky";
 
                   return (
                     <tr key={member.id}>
                       <td className="whitespace-nowrap px-6 py-4">
                         <p className="font-semibold text-gray-900">
-                          {profile?.nickname || "Bez přezdívky"}
+                          {playerName}
                         </p>
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            member.approved
-                              ? "bg-green-100 text-green-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}
+                        <form
+                          action={`/api/souteze/${id}/hraci/${member.id}/schvaleni`}
+                          method="post"
                         >
-                          {member.approved ? "Schválen" : "Čeká"}
-                        </span>
+                          <input
+                            type="hidden"
+                            name="approved"
+                            value={member.approved ? "false" : "true"}
+                          />
+
+                          <button
+                            type="submit"
+                            title="Kliknutím změnit stav schválení"
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-75 ${
+                              member.approved
+                                ? "bg-green-100 text-green-700"
+                                : "bg-yellow-100 text-yellow-700"
+                            }`}
+                          >
+                            {member.approved ? "Schválen" : "Čeká"}
+                          </button>
+                        </form>
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            member.paid
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
+                        <form
+                          action={`/api/souteze/${id}/hraci/${member.id}/platba`}
+                          method="post"
                         >
-                          {member.paid ? "Zaplaceno" : "Nezaplaceno"}
-                        </span>
+                          <input
+                            type="hidden"
+                            name="paid"
+                            value={member.paid ? "false" : "true"}
+                          />
+
+                          <button
+                            type="submit"
+                            title="Kliknutím změnit stav platby"
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-75 ${
+                              member.paid
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {member.paid ? "Zaplaceno" : "Nezaplaceno"}
+                          </button>
+                        </form>
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                         {new Date(member.created_at).toLocaleDateString("cs-CZ")}
+                      </td>
+
+                      <td className="whitespace-nowrap px-6 py-4 text-right">
+                        <form
+                          action={`/api/souteze/${id}/hraci/${member.id}/smazat`}
+                          method="post"
+                        >
+                          <DeletePlayerButton playerName={playerName} />
+                        </form>
                       </td>
                     </tr>
                   );
@@ -163,4 +204,6 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     </div>
   );
 }
+
+
 
