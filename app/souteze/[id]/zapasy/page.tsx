@@ -13,15 +13,21 @@ type MatchesPageProps = {
   }>;
 };
 
+type Team = {
+  id: string;
+  name_cs: string;
+  flag_emoji: string;
+};
+
 type Match = {
   id: string;
   round: string | null;
-  home_team: string;
-  away_team: string;
   match_time: string;
   home_score: number | null;
   away_score: number | null;
   finished: boolean;
+  home_team: Team | null;
+  away_team: Team | null;
 };
 
 const RESULT_WARNING_AFTER_HOURS = 24;
@@ -49,13 +55,21 @@ export default async function MatchesPage({
       `
         id,
         round,
-        home_team,
-        away_team,
         match_time,
         home_score,
         away_score,
-        finished
-      `
+        finished,
+        home_team:teams!matches_home_team_id_fkey (
+          id,
+          name_cs,
+          flag_emoji
+        ),
+        away_team:teams!matches_away_team_id_fkey (
+          id,
+          name_cs,
+          flag_emoji
+        )
+      `,
     )
     .eq("competition_id", id);
 
@@ -66,22 +80,20 @@ export default async function MatchesPage({
           Nepodařilo se načíst zápasy
         </h2>
 
-        <p className="mt-2 text-sm text-red-600">
-          {error.message}
-        </p>
+        <p className="mt-2 text-sm text-red-600">{error.message}</p>
       </div>
     );
   }
 
-  const allMatches = (data ?? []) as Match[];
+  const allMatches = (data ?? []) as unknown as Match[];
   const now = Date.now();
 
   const rounds = Array.from(
     new Set(
       allMatches
         .map((match) => match.round?.trim())
-        .filter((value): value is string => Boolean(value))
-    )
+        .filter((value): value is string => Boolean(value)),
+    ),
   ).sort((a, b) => a.localeCompare(b, "cs-CZ"));
 
   const filteredMatches = round
@@ -105,19 +117,15 @@ export default async function MatchesPage({
     .sort(
       (a, b) =>
         new Date(a.match_time).getTime() -
-        new Date(b.match_time).getTime()
+        new Date(b.match_time).getTime(),
     );
 
   const upcomingMatches = filteredMatches
-    .filter(
-      (match) =>
-        !match.finished &&
-        !isResultOverdue(match)
-    )
+    .filter((match) => !match.finished && !isResultOverdue(match))
     .sort(
       (a, b) =>
         new Date(a.match_time).getTime() -
-        new Date(b.match_time).getTime()
+        new Date(b.match_time).getTime(),
     );
 
   const finishedMatches = filteredMatches
@@ -125,7 +133,7 @@ export default async function MatchesPage({
     .sort(
       (a, b) =>
         new Date(b.match_time).getTime() -
-        new Date(a.match_time).getTime()
+        new Date(a.match_time).getTime(),
     );
 
   const hasMatches =
@@ -147,13 +155,27 @@ export default async function MatchesPage({
       minute: "2-digit",
     });
 
-    const matchLabel = `${match.home_team} – ${match.away_team}`;
+    const homeTeamName =
+      match.home_team?.name_cs ?? "Neznámý tým";
+
+    const awayTeamName =
+      match.away_team?.name_cs ?? "Neznámý tým";
+
+    const homeTeamLabel = `${
+      match.home_team?.flag_emoji ?? ""
+    } ${homeTeamName}`.trim();
+
+    const awayTeamLabel = `${
+      match.away_team?.flag_emoji ?? ""
+    } ${awayTeamName}`.trim();
+
+    const matchLabel = `${homeTeamLabel} – ${awayTeamLabel}`;
 
     const hoursSinceStart = Math.max(
       0,
       Math.floor(
-        (now - matchDate.getTime()) / (1000 * 60 * 60)
-      )
+        (now - matchDate.getTime()) / (1000 * 60 * 60),
+      ),
     );
 
     const resultOverdue = isResultOverdue(match);
@@ -176,14 +198,12 @@ export default async function MatchesPage({
             {formattedDate}
           </p>
 
-          <p className="text-sm text-gray-500">
-            {formattedTime}
-          </p>
+          <p className="text-sm text-gray-500">{formattedTime}</p>
         </div>
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <p className="text-right font-bold text-gray-900">
-            {match.home_team}
+            {homeTeamLabel}
           </p>
 
           <div className="min-w-20 text-center">
@@ -199,7 +219,7 @@ export default async function MatchesPage({
           </div>
 
           <p className="font-bold text-gray-900">
-            {match.away_team}
+            {awayTeamLabel}
           </p>
         </div>
 
@@ -261,8 +281,8 @@ export default async function MatchesPage({
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            Neodehrané zápasy jsou nahoře, odehrané dole.
-            Po {RESULT_WARNING_AFTER_HOURS} hodinách bez výsledku se zápas
+            Neodehrané zápasy jsou nahoře, odehrané dole. Po{" "}
+            {RESULT_WARNING_AFTER_HOURS} hodinách bez výsledku se zápas
             označí jako nevyřízený.
           </p>
         </div>
@@ -304,7 +324,7 @@ export default async function MatchesPage({
               <Link
                 key={roundName}
                 href={`/souteze/${id}/zapasy?round=${encodeURIComponent(
-                  roundName
+                  roundName,
                 )}`}
                 className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
                   isActive
