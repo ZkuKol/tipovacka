@@ -17,6 +17,36 @@ type MatchResultFormProps = {
   };
 };
 
+type Tip = {
+  id: string;
+  winner: "home" | "away";
+  margin_bucket: number;
+};
+
+function getMarginBucket(difference: number) {
+  if (difference >= 91) {
+    return 95;
+  }
+
+  return Math.ceil(difference / 5) * 5;
+}
+
+function calculateTipPoints(
+  tip: Tip,
+  actualWinner: "home" | "away",
+  actualMarginBucket: number,
+) {
+  if (tip.winner !== actualWinner) {
+    return 0;
+  }
+
+  if (tip.margin_bucket === actualMarginBucket) {
+    return 5;
+  }
+
+  return 1;
+}
+
 export default function MatchResultForm({
   competitionId,
   match,
@@ -25,11 +55,11 @@ export default function MatchResultForm({
   const supabase = createClient();
 
   const [homeScore, setHomeScore] = useState(
-    match.homeScore?.toString() ?? ""
+    match.homeScore?.toString() ?? "",
   );
 
   const [awayScore, setAwayScore] = useState(
-    match.awayScore?.toString() ?? ""
+    match.awayScore?.toString() ?? "",
   );
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -54,15 +84,20 @@ export default function MatchResultForm({
       parsedHomeScore < 0 ||
       parsedAwayScore < 0
     ) {
+      setErrorMessage("Skóre musí být celé nezáporné číslo.");
+      return;
+    }
+
+    if (parsedHomeScore === parsedAwayScore) {
       setErrorMessage(
-        "Skóre musí být celé nezáporné číslo."
+        "Basketbalový zápas nemůže skončit remízou. Zadej konečný výsledek po případném prodloužení.",
       );
       return;
     }
 
     setIsSubmitting(true);
 
-    const { error } = await supabase
+    const { error: matchError } = await supabase
       .from("matches")
       .update({
         home_score: parsedHomeScore,
@@ -72,9 +107,68 @@ export default function MatchResultForm({
       .eq("id", match.id)
       .eq("competition_id", competitionId);
 
-    if (error) {
+    if (matchError) {
       setErrorMessage(
-        `Výsledek se nepodařilo uložit: ${error.message}`
+        `Výsledek se nepodařilo uložit: ${matchError.message}`,
+      );
+
+      setIsSubmitting(false);
+      return;
+    }
+
+    const actualWinner: "home" | "away" =
+      parsedHomeScore > parsedAwayScore ? "home" : "away";
+
+    const scoreDifference = Math.abs(
+      parsedHomeScore - parsedAwayScore,
+    );
+
+    const actualMarginBucket = getMarginBucket(scoreDifference);
+
+    const { data: tipsData, error: tipsError } = await supabase
+      .from("tips")
+      .select(
+        `
+          id,
+          winner,
+          margin_bucket
+        `,
+      )
+      .eq("match_id", match.id);
+
+    if (tipsError) {
+      setErrorMessage(
+        `Výsledek byl uložen, ale nepodařilo se načíst tipy pro vyhodnocení: ${tipsError.message}`,
+      );
+
+      setIsSubmitting(false);
+      return;
+    }
+
+    const tips = (tipsData ?? []) as Tip[];
+
+    const scoringResults = await Promise.all(
+      tips.map((tip) => {
+        const points = calculateTipPoints(
+          tip,
+          actualWinner,
+          actualMarginBucket,
+        );
+
+        return supabase
+          .from("tips")
+          .update({ points })
+          .eq("id", tip.id);
+      }),
+    );
+
+    const scoringError = scoringResults.find(
+      (result) => result.error,
+    )?.error;
+
+    if (scoringError) {
+      setErrorMessage(
+        `Výsledek byl uložen, ale nepodařilo se přepočítat všechny tipy: ${scoringError.message}`,
       );
 
       setIsSubmitting(false);
@@ -87,7 +181,7 @@ export default function MatchResultForm({
 
   async function handleRemoveResult() {
     const confirmed = window.confirm(
-      "Opravdu chceš výsledek zápasu odstranit?"
+      "Opravdu chceš výsledek zápasu odstranit? Body za tento zápas budou vynulované.",
     );
 
     if (!confirmed) {
@@ -97,7 +191,7 @@ export default function MatchResultForm({
     setIsSubmitting(true);
     setErrorMessage("");
 
-    const { error } = await supabase
+    const { error: matchError } = await supabase
       .from("matches")
       .update({
         home_score: null,
@@ -107,9 +201,25 @@ export default function MatchResultForm({
       .eq("id", match.id)
       .eq("competition_id", competitionId);
 
-    if (error) {
+    if (matchError) {
       setErrorMessage(
-        `Výsledek se nepodařilo odstranit: ${error.message}`
+        `Výsledek se nepodařilo odstranit: ${matchError.message}`,
+      );
+
+      setIsSubmitting(false);
+      return;
+    }
+
+    const { error: tipsError } = await supabase
+      .from("tips")
+      .update({
+        points: 0,
+      })
+      .eq("match_id", match.id);
+
+    if (tipsError) {
+      setErrorMessage(
+        `Výsledek byl odstraněn, ale nepodařilo se vynulovat body: ${tipsError.message}`,
       );
 
       setIsSubmitting(false);
@@ -128,7 +238,8 @@ export default function MatchResultForm({
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          Po uložení bude zápas označený jako odehraný.
+          Po uložení bude zápas označený jako odehraný a všechny tipy
+          se automaticky vyhodnotí.
         </p>
       </div>
 
@@ -214,7 +325,7 @@ export default function MatchResultForm({
               className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
             >
               {isSubmitting
-                ? "Ukládám…"
+                ? "Vyhodnocuji…"
                 : match.finished
                   ? "Uložit změny"
                   : "Uložit výsledek"}
