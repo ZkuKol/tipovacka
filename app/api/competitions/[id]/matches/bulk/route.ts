@@ -19,6 +19,11 @@ type RouteContext = {
   }>;
 };
 
+type Team = {
+  id: string;
+  name_cs: string;
+};
+
 function isValidMatch(match: unknown): match is MatchToSave {
   if (
     typeof match !== "object" ||
@@ -41,6 +46,12 @@ function isValidMatch(match: unknown): match is MatchToSave {
     candidate.matchTime.trim() !== "" &&
     !Number.isNaN(Date.parse(candidate.matchTime))
   );
+}
+
+function normalizeTeamName(value: string) {
+  return value
+    .trim()
+    .toLocaleLowerCase("cs-CZ");
 }
 
 export async function POST(
@@ -129,16 +140,102 @@ export async function POST(
       );
     }
 
-    const matchesToInsert = matches.map((match) => ({
-      competition_id: competitionId,
-      round: match.round.trim(),
-      home_team: match.homeTeam.trim(),
-      away_team: match.awayTeam.trim(),
-      match_time: match.matchTime,
-      home_score: null,
-      away_score: null,
-      finished: false,
-    }));
+    const { data: teamsData, error: teamsError } = await supabase
+      .from("teams")
+      .select("id, name_cs");
+
+    if (teamsError) {
+      console.error(
+        "Chyba při načítání týmů:",
+        teamsError,
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Nepodařilo se načíst týmy: ${teamsError.message}`,
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+
+    const teams = (teamsData ?? []) as Team[];
+
+    const teamsByName = new Map(
+      teams.map((team) => [
+        normalizeTeamName(team.name_cs),
+        team,
+      ]),
+    );
+
+    const matchesToInsert = [];
+
+    for (let index = 0; index < matches.length; index += 1) {
+      const match = matches[index];
+
+      const homeTeam = teamsByName.get(
+        normalizeTeamName(match.homeTeam),
+      );
+
+      const awayTeam = teamsByName.get(
+        normalizeTeamName(match.awayTeam),
+      );
+
+      if (!homeTeam) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Řádek ${index + 1}: domácí tým „${
+              match.homeTeam
+            }“ nebyl nalezen v databázi týmů.`,
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+
+      if (!awayTeam) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Řádek ${index + 1}: hostující tým „${
+              match.awayTeam
+            }“ nebyl nalezen v databázi týmů.`,
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+
+      if (homeTeam.id === awayTeam.id) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Řádek ${
+              index + 1
+            }: domácí a hostující tým nemohou být stejné.`,
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+
+      matchesToInsert.push({
+        competition_id: competitionId,
+        round: match.round.trim(),
+        home_team_id: homeTeam.id,
+        away_team_id: awayTeam.id,
+        match_time: match.matchTime,
+        home_score: null,
+        away_score: null,
+        finished: false,
+      });
+    }
 
     const { error: insertError } = await supabase
       .from("matches")

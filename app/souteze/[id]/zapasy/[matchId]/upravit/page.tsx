@@ -13,6 +13,7 @@ export default async function EditMatchPage({
   params,
 }: EditMatchPageProps) {
   const { id, matchId } = await params;
+
   const supabase = await createClient();
 
   const {
@@ -30,10 +31,10 @@ export default async function EditMatchPage({
         id,
         competition_id,
         round,
-        home_team,
-        away_team,
+        home_team_id,
+        away_team_id,
         match_time
-      `
+      `,
     )
     .eq("id", matchId)
     .eq("competition_id", id)
@@ -49,8 +50,8 @@ export default async function EditMatchPage({
       match={{
         id: match.id,
         round: match.round,
-        homeTeam: match.home_team,
-        awayTeam: match.away_team,
+        homeTeamId: match.home_team_id,
+        awayTeamId: match.away_team_id,
         matchTime: match.match_time,
       }}
     />

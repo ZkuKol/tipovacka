@@ -2,15 +2,22 @@
 
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+type Team = {
+  id: string;
+  name_cs: string;
+  flag_emoji: string;
+};
+
 type EditMatchFormProps = {
   competitionId: string;
   match: {
     id: string;
     round: string | null;
-    homeTeam: string;
-    awayTeam: string;
+    homeTeamId: string;
+    awayTeamId: string;
     matchTime: string;
   };
 };
@@ -34,15 +41,41 @@ export default function EditMatchForm({
   const router = useRouter();
   const supabase = createClient();
 
+  const [teams, setTeams] = useState<Team[]>([]);
   const [round, setRound] = useState(match.round ?? "");
-  const [homeTeam, setHomeTeam] = useState(match.homeTeam);
-  const [awayTeam, setAwayTeam] = useState(match.awayTeam);
+  const [homeTeamId, setHomeTeamId] = useState(match.homeTeamId);
+  const [awayTeamId, setAwayTeamId] = useState(match.awayTeamId);
   const [matchTime, setMatchTime] = useState(
-    formatDateTimeLocal(match.matchTime)
+    formatDateTimeLocal(match.matchTime),
   );
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [isLoadingTeams, setIsLoadingTeams] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function loadTeams() {
+      setIsLoadingTeams(true);
+
+      const { data, error } = await supabase
+        .from("teams")
+        .select("id, name_cs, flag_emoji")
+        .order("name_cs", { ascending: true });
+
+      if (error) {
+        setErrorMessage(
+          `Týmy se nepodařilo načíst: ${error.message}`,
+        );
+        setIsLoadingTeams(false);
+        return;
+      }
+
+      setTeams((data ?? []) as Team[]);
+      setIsLoadingTeams(false);
+    }
+
+    void loadTeams();
+  }, [supabase]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,21 +83,17 @@ export default function EditMatchForm({
     setErrorMessage("");
 
     const cleanRound = round.trim();
-    const cleanHomeTeam = homeTeam.trim();
-    const cleanAwayTeam = awayTeam.trim();
 
-    if (!cleanHomeTeam || !cleanAwayTeam || !matchTime) {
+    if (!homeTeamId || !awayTeamId || !matchTime) {
       setErrorMessage(
-        "Vyplň domácí tým, hostující tým a datum zápasu."
+        "Vyber domácí tým, hostující tým a datum zápasu.",
       );
       return;
     }
 
-    if (
-      cleanHomeTeam.toLowerCase() === cleanAwayTeam.toLowerCase()
-    ) {
+    if (homeTeamId === awayTeamId) {
       setErrorMessage(
-        "Domácí a hostující tým nemohou být stejné."
+        "Domácí a hostující tým nemohou být stejné.",
       );
       return;
     }
@@ -82,8 +111,8 @@ export default function EditMatchForm({
       .from("matches")
       .update({
         round: cleanRound || null,
-        home_team: cleanHomeTeam,
-        away_team: cleanAwayTeam,
+        home_team_id: homeTeamId,
+        away_team_id: awayTeamId,
         match_time: parsedMatchTime.toISOString(),
       })
       .eq("id", match.id)
@@ -91,7 +120,7 @@ export default function EditMatchForm({
 
     if (error) {
       setErrorMessage(
-        `Změny se nepodařilo uložit: ${error.message}`
+        `Změny se nepodařilo uložit: ${error.message}`,
       );
       setIsSubmitting(false);
       return;
@@ -131,7 +160,7 @@ export default function EditMatchForm({
               type="text"
               value={round}
               onChange={(event) => setRound(event.target.value)}
-              placeholder="Například: 1. kolo nebo Skupina A"
+              placeholder="Například: Skupina A"
               className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
             />
           </div>
@@ -144,14 +173,30 @@ export default function EditMatchForm({
               Domácí tým
             </label>
 
-            <input
+            <select
               id="homeTeam"
-              type="text"
-              value={homeTeam}
-              onChange={(event) => setHomeTeam(event.target.value)}
+              value={homeTeamId}
+              onChange={(event) => setHomeTeamId(event.target.value)}
               required
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-            />
+              disabled={isLoadingTeams}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:bg-gray-100"
+            >
+              <option value="">
+                {isLoadingTeams
+                  ? "Načítám týmy…"
+                  : "Vyber domácí tým"}
+              </option>
+
+              {teams.map((team) => (
+                <option
+                  key={team.id}
+                  value={team.id}
+                  disabled={team.id === awayTeamId}
+                >
+                  {team.flag_emoji} {team.name_cs}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -162,14 +207,30 @@ export default function EditMatchForm({
               Hostující tým
             </label>
 
-            <input
+            <select
               id="awayTeam"
-              type="text"
-              value={awayTeam}
-              onChange={(event) => setAwayTeam(event.target.value)}
+              value={awayTeamId}
+              onChange={(event) => setAwayTeamId(event.target.value)}
               required
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-            />
+              disabled={isLoadingTeams}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:bg-gray-100"
+            >
+              <option value="">
+                {isLoadingTeams
+                  ? "Načítám týmy…"
+                  : "Vyber hostující tým"}
+              </option>
+
+              {teams.map((team) => (
+                <option
+                  key={team.id}
+                  value={team.id}
+                  disabled={team.id === homeTeamId}
+                >
+                  {team.flag_emoji} {team.name_cs}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -207,7 +268,7 @@ export default function EditMatchForm({
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLoadingTeams}
             className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
           >
             {isSubmitting ? "Ukládám…" : "Uložit změny"}
@@ -217,3 +278,4 @@ export default function EditMatchForm({
     </div>
   );
 }
+
