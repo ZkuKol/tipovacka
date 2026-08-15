@@ -41,25 +41,62 @@ function parseMarginBucket(
   return marginBucket;
 }
 
-export async function POST(request: Request, { params }: RouteProps) {
+function parseFootballScore(
+  value: FormDataEntryValue | null,
+): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const score = Number(trimmed);
+
+  if (
+    !Number.isInteger(score) ||
+    score < 0 ||
+    score > 99
+  ) {
+    return null;
+  }
+
+  return score;
+}
+
+export async function POST(
+  request: Request,
+  { params }: RouteProps,
+) {
   const { id: competitionId, matchId } = await params;
   const profile = await requireUser();
 
-  const formData = await request.formData();
+  const supabase = await createClient();
 
-  const winner = parseWinner(formData.get("winner"));
-  const marginBucket = parseMarginBucket(formData.get("marginBucket"));
+  const { data: competition, error: competitionError } =
+    await supabase
+      .from("competitions")
+      .select("id, sport")
+      .eq("id", competitionId)
+      .maybeSingle();
 
-  if (!winner || marginBucket === null) {
+  if (competitionError) {
     return new NextResponse(
-      "Vyber vítěze a platné pásmo rozdílu od 5 do 95 bodů.",
+      `Nepodařilo se ověřit soutěž: ${competitionError.message}`,
       {
-        status: 400,
+        status: 500,
       },
     );
   }
 
-  const supabase = await createClient();
+  if (!competition) {
+    return new NextResponse("Soutěž nebyla nalezena.", {
+      status: 404,
+    });
+  }
 
   const { data: member, error: memberError } = await supabase
     .from("competition_members")
@@ -84,9 +121,12 @@ export async function POST(request: Request, { params }: RouteProps) {
   }
 
   if (!member.approved) {
-    return new NextResponse("Členství v soutěži ještě není schválené.", {
-      status: 403,
-    });
+    return new NextResponse(
+      "Členství v soutěži ještě není schválené.",
+      {
+        status: 403,
+      },
+    );
   }
 
   const { data: match, error: matchError } = await supabase
@@ -120,32 +160,119 @@ export async function POST(request: Request, { params }: RouteProps) {
     );
   }
 
-  const { error: saveError } = await supabase.from("tips").upsert(
-    {
-      match_id: matchId,
-      competition_member_id: member.id,
-      winner,
-      margin_bucket: marginBucket,
-      points: 0,
-    },
-    {
-      onConflict: "match_id,competition_member_id",
-    },
-  );
+  const formData = await request.formData();
 
-  if (saveError) {
-    return new NextResponse(
-      `Tip se nepodařilo uložit: ${saveError.message}`,
-      {
-        status: 500,
-      },
+  /*
+   * FOTBAL
+   */
+  if (competition.sport === "football") {
+    const homeScoreTip = parseFootballScore(
+      formData.get("homeScoreTip"),
     );
+
+    const awayScoreTip = parseFootballScore(
+      formData.get("awayScoreTip"),
+    );
+
+    if (
+      homeScoreTip === null ||
+      awayScoreTip === null
+    ) {
+      return new NextResponse(
+        "Zadej platné skóre obou týmů od 0 do 99.",
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const { error: saveError } = await supabase
+      .from("tips")
+      .upsert(
+        {
+          match_id: matchId,
+          competition_member_id: member.id,
+
+          home_score_tip: homeScoreTip,
+          away_score_tip: awayScoreTip,
+
+          winner: null,
+          margin_bucket: null,
+
+          points: 0,
+        },
+        {
+          onConflict: "match_id,competition_member_id",
+        },
+      );
+
+    if (saveError) {
+      return new NextResponse(
+        `Tip se nepodařilo uložit: ${saveError.message}`,
+        {
+          status: 500,
+        },
+      );
+    }
+  } else {
+    /*
+     * BASKETBAL
+     */
+    const winner = parseWinner(
+      formData.get("winner"),
+    );
+
+    const marginBucket = parseMarginBucket(
+      formData.get("marginBucket"),
+    );
+
+    if (!winner || marginBucket === null) {
+      return new NextResponse(
+        "Vyber vítěze a platné pásmo rozdílu od 5 do 95 bodů.",
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const { error: saveError } = await supabase
+      .from("tips")
+      .upsert(
+        {
+          match_id: matchId,
+          competition_member_id: member.id,
+
+          winner,
+          margin_bucket: marginBucket,
+
+          home_score_tip: null,
+          away_score_tip: null,
+
+          points: 0,
+        },
+        {
+          onConflict: "match_id,competition_member_id",
+        },
+      );
+
+    if (saveError) {
+      return new NextResponse(
+        `Tip se nepodařilo uložit: ${saveError.message}`,
+        {
+          status: 500,
+        },
+      );
+    }
   }
 
   revalidatePath(`/souteze/${competitionId}/tipy`);
+  revalidatePath(`/souteze/${competitionId}/tabulka`);
 
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const host = forwardedHost ?? request.headers.get("host");
+  const forwardedHost =
+    request.headers.get("x-forwarded-host");
+
+  const host =
+    forwardedHost ?? request.headers.get("host");
 
   if (!host) {
     return new NextResponse(

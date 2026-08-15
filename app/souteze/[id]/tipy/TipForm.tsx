@@ -6,10 +6,16 @@ type Winner = "home" | "away";
 
 type TipFormProps = {
   action: string;
+  sport: string;
   homeTeam: string;
   awayTeam: string;
+
   initialWinner?: Winner;
   initialMarginBucket?: number;
+
+  initialHomeScoreTip?: number;
+  initialAwayScoreTip?: number;
+
   locked: boolean;
   hasSavedTip: boolean;
 };
@@ -24,20 +30,35 @@ function getMarginLabel(marginBucket: number) {
 
 export default function TipForm({
   action,
+  sport,
   homeTeam,
   awayTeam,
   initialWinner,
   initialMarginBucket = 5,
+  initialHomeScoreTip,
+  initialAwayScoreTip,
   locked,
   hasSavedTip,
 }: TipFormProps) {
   const [isEditing, setIsEditing] = useState(!hasSavedTip);
+
   const [winner, setWinner] = useState<Winner | null>(
     initialWinner ?? null,
   );
+
   const [marginBucket, setMarginBucket] = useState(
     initialMarginBucket,
   );
+
+  const [homeScoreTip, setHomeScoreTip] = useState(
+    initialHomeScoreTip?.toString() ?? "",
+  );
+
+  const [awayScoreTip, setAwayScoreTip] = useState(
+    initialAwayScoreTip?.toString() ?? "",
+  );
+
+  const isFrozen = locked || (hasSavedTip && !isEditing);
 
   function decreaseMargin() {
     setMarginBucket((current) => Math.max(5, current - 5));
@@ -47,14 +68,147 @@ export default function TipForm({
     setMarginBucket((current) => Math.min(95, current + 5));
   }
 
-  function cancelEditing() {
+  function cancelBasketEditing() {
     setWinner(initialWinner ?? null);
     setMarginBucket(initialMarginBucket);
     setIsEditing(false);
   }
 
-  const isFrozen = locked || (hasSavedTip && !isEditing);
+  function cancelFootballEditing() {
+    setHomeScoreTip(initialHomeScoreTip?.toString() ?? "");
+    setAwayScoreTip(initialAwayScoreTip?.toString() ?? "");
+    setIsEditing(false);
+  }
 
+  /*
+   * FOTBAL
+   */
+  if (sport === "football") {
+    const footballTipComplete =
+      homeScoreTip !== "" && awayScoreTip !== "";
+
+    return (
+      <div className="mt-5">
+        <div
+          className={`rounded-2xl border p-5 transition ${
+            isFrozen
+              ? "border-gray-200 bg-gray-50"
+              : "border-orange-200 bg-white"
+          }`}
+        >
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+            <div className="flex flex-col items-center gap-3">
+              <span className="text-center text-lg font-bold text-gray-900">
+                {homeTeam}
+              </span>
+
+              <input
+                type="number"
+                min="0"
+                max="99"
+                inputMode="numeric"
+                disabled={isFrozen}
+                value={homeScoreTip}
+                onChange={(event) =>
+                  setHomeScoreTip(event.target.value)
+                }
+                aria-label={`Tip na skóre týmu ${homeTeam}`}
+                className="h-14 w-20 rounded-xl border border-gray-300 bg-white text-center text-2xl font-black text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-default disabled:bg-gray-100 disabled:text-gray-600"
+              />
+            </div>
+
+            <span className="mt-9 text-2xl font-black text-gray-400">
+              :
+            </span>
+
+            <div className="flex flex-col items-center gap-3">
+              <span className="text-center text-lg font-bold text-gray-900">
+                {awayTeam}
+              </span>
+
+              <input
+                type="number"
+                min="0"
+                max="99"
+                inputMode="numeric"
+                disabled={isFrozen}
+                value={awayScoreTip}
+                onChange={(event) =>
+                  setAwayScoreTip(event.target.value)
+                }
+                aria-label={`Tip na skóre týmu ${awayTeam}`}
+                className="h-14 w-20 rounded-xl border border-gray-300 bg-white text-center text-2xl font-black text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-default disabled:bg-gray-100 disabled:text-gray-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {locked ? (
+          <p className="mt-4 text-center text-sm font-semibold text-gray-600">
+            Tipování je uzamčeno.
+          </p>
+        ) : hasSavedTip && !isEditing ? (
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="rounded-xl border border-orange-600 px-5 py-2.5 text-sm font-bold text-orange-700 transition hover:bg-orange-50"
+            >
+              Upravit tip
+            </button>
+
+            <span className="text-sm font-semibold text-green-700">
+              Tip uložen
+            </span>
+          </div>
+        ) : (
+          <form action={action} method="post" className="mt-4">
+            <input
+              type="hidden"
+              name="homeScoreTip"
+              value={homeScoreTip}
+            />
+
+            <input
+              type="hidden"
+              name="awayScoreTip"
+              value={awayScoreTip}
+            />
+
+            <input
+              type="hidden"
+              name="sport"
+              value="football"
+            />
+
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="submit"
+                disabled={!footballTipComplete}
+                className="rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
+              >
+                Uložit tip
+              </button>
+
+              {hasSavedTip && (
+                <button
+                  type="button"
+                  onClick={cancelFootballEditing}
+                  className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-100"
+                >
+                  Zrušit
+                </button>
+              )}
+            </div>
+          </form>
+        )}
+      </div>
+    );
+  }
+
+  /*
+   * BASKETBAL
+   */
   return (
     <div className="mt-5">
       <div
@@ -171,11 +325,22 @@ export default function TipForm({
         </div>
       ) : (
         <form action={action} method="post" className="mt-4">
-          <input type="hidden" name="winner" value={winner ?? ""} />
+          <input
+            type="hidden"
+            name="winner"
+            value={winner ?? ""}
+          />
+
           <input
             type="hidden"
             name="marginBucket"
             value={marginBucket}
+          />
+
+          <input
+            type="hidden"
+            name="sport"
+            value="basketball"
           />
 
           <div className="flex items-center justify-center gap-3">
@@ -190,7 +355,7 @@ export default function TipForm({
             {hasSavedTip && (
               <button
                 type="button"
-                onClick={cancelEditing}
+                onClick={cancelBasketEditing}
                 className="rounded-xl border border-gray-300 px-5 py-2.5 text-sm font-bold text-gray-700 transition hover:bg-gray-100"
               >
                 Zrušit

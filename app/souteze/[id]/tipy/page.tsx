@@ -29,12 +29,26 @@ type Match = {
 type Tip = {
   id: string;
   match_id: string;
-  winner: "home" | "away";
-  margin_bucket: number;
+  winner: "home" | "away" | null;
+  margin_bucket: number | null;
+  home_score_tip: number | null;
+  away_score_tip: number | null;
   points: number;
 };
 
-function getPointsClasses(points: number) {
+function getPointsClasses(points: number, sport: string) {
+  if (sport === "football") {
+    if (points === 3) {
+      return "border-green-200 bg-green-50 text-green-700";
+    }
+
+    if (points === 1) {
+      return "border-yellow-200 bg-yellow-50 text-yellow-700";
+    }
+
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+
   if (points === 5) {
     return "border-green-200 bg-green-50 text-green-700";
   }
@@ -54,7 +68,7 @@ export default async function TipsPage({ params }: TipsPageProps) {
 
   const { data: competition, error: competitionError } = await supabase
     .from("competitions")
-    .select("id, title")
+    .select("id, title, sport")
     .eq("id", id)
     .single();
 
@@ -142,13 +156,17 @@ export default async function TipsPage({ params }: TipsPageProps) {
         match_id,
         winner,
         margin_bucket,
+        home_score_tip,
+        away_score_tip,
         points
       `,
     )
     .eq("competition_member_id", member.id);
 
   if (tipsError) {
-    throw new Error(`Nepodařilo se načíst tipy: ${tipsError.message}`);
+    throw new Error(
+      `Nepodařilo se načíst tipy: ${tipsError.message}`,
+    );
   }
 
   const matches = (matchesData ?? []) as unknown as Match[];
@@ -160,14 +178,19 @@ export default async function TipsPage({ params }: TipsPageProps) {
 
   const now = new Date();
 
+  const isFootball = competition.sport === "football";
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Tipování</h2>
+        <h2 className="text-2xl font-bold text-gray-900">
+          Tipování
+        </h2>
 
         <p className="mt-1 text-sm text-gray-600">
-          Vyber vítěze a odhadni pásmo výsledného rozdílu. Tip lze měnit až
-          do začátku zápasu.
+          {isFootball
+            ? "Zadej očekávané konečné skóre zápasu. Tip lze měnit až do začátku utkání."
+            : "Vyber vítěze a odhadni pásmo výsledného rozdílu. Tip lze měnit až do začátku zápasu."}
         </p>
 
         {!member.paid && (
@@ -192,6 +215,7 @@ export default async function TipsPage({ params }: TipsPageProps) {
         <div className="space-y-4">
           {matches.map((match) => {
             const tip = tipsByMatchId.get(match.id);
+
             const matchDate = new Date(match.match_time);
             const isLocked = matchDate <= now;
 
@@ -222,7 +246,7 @@ export default async function TipsPage({ params }: TipsPageProps) {
                 <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-orange-600">
-                      {match.round || "Bez označení skupiny"}
+                      {match.round || "Bez označení kola"}
                     </p>
 
                     <p className="mt-1 text-sm font-semibold text-gray-700">
@@ -243,17 +267,32 @@ export default async function TipsPage({ params }: TipsPageProps) {
                         : "bg-green-100 text-green-700"
                     }`}
                   >
-                    {isLocked ? "Tipování uzamčeno" : "Tipování otevřeno"}
+                    {isLocked
+                      ? "Tipování uzamčeno"
+                      : "Tipování otevřeno"}
                   </span>
                 </div>
 
                 <div className="p-5">
                   <TipForm
                     action={`/api/souteze/${id}/tipy/${match.id}`}
+                    sport={competition.sport}
                     homeTeam={homeTeamLabel}
                     awayTeam={awayTeamLabel}
-                    initialWinner={tip?.winner}
-                    initialMarginBucket={tip?.margin_bucket}
+                    initialWinner={
+                      tip?.winner === "home" || tip?.winner === "away"
+                        ? tip.winner
+                        : undefined
+                    }
+                    initialMarginBucket={
+                      tip?.margin_bucket ?? undefined
+                    }
+                    initialHomeScoreTip={
+                      tip?.home_score_tip ?? undefined
+                    }
+                    initialAwayScoreTip={
+                      tip?.away_score_tip ?? undefined
+                    }
                     locked={isLocked}
                     hasSavedTip={Boolean(tip)}
                   />
@@ -274,6 +313,7 @@ export default async function TipsPage({ params }: TipsPageProps) {
                           <span
                             className={`inline-flex rounded-xl border px-4 py-2 text-sm font-bold ${getPointsClasses(
                               tip.points,
+                              competition.sport,
                             )}`}
                           >
                             Získáno: {tip.points}{" "}
