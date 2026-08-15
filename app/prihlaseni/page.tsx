@@ -11,6 +11,15 @@ export default function PrihlaseniPage() {
 
         <LoginForm />
 
+        <p className="mt-4 text-center text-sm">
+          <Link
+            href="/obnova-hesla"
+            className="font-semibold text-blue-700 hover:underline"
+          >
+            Zapomenuté heslo?
+          </Link>
+        </p>
+
         <p className="mt-6 text-center text-sm text-gray-600">
           Ještě nemáš účet?{" "}
           <Link
@@ -24,3 +33,4 @@ export default function PrihlaseniPage() {
     </main>
   );
 }
+
