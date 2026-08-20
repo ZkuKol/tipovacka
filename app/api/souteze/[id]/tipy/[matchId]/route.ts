@@ -41,8 +41,9 @@ function parseMarginBucket(
   return marginBucket;
 }
 
-function parseFootballScore(
+function parseScore(
   value: FormDataEntryValue | null,
+  maximum: number,
 ): number | null {
   if (typeof value !== "string") {
     return null;
@@ -59,7 +60,7 @@ function parseFootballScore(
   if (
     !Number.isInteger(score) ||
     score < 0 ||
-    score > 99
+    score > maximum
   ) {
     return null;
   }
@@ -163,15 +164,22 @@ export async function POST(
   const formData = await request.formData();
 
   /*
-   * FOTBAL
+   * FOTBAL + HOKEJ
+   *
+   * Tipujeme přesné skóre.
    */
-  if (competition.sport === "football") {
-    const homeScoreTip = parseFootballScore(
+  if (
+    competition.sport === "football" ||
+    competition.sport === "hockey"
+  ) {
+    const homeScoreTip = parseScore(
       formData.get("homeScoreTip"),
+      99,
     );
 
-    const awayScoreTip = parseFootballScore(
+    const awayScoreTip = parseScore(
       formData.get("awayScoreTip"),
+      99,
     );
 
     if (
@@ -214,10 +222,84 @@ export async function POST(
         },
       );
     }
-  } else {
-    /*
-     * BASKETBAL
-     */
+  }
+
+  /*
+   * TENIS
+   *
+   * Do stejných score sloupců ukládáme výsledek na sety.
+   * Například 2:0, 2:1 nebo 3:2.
+   */
+  else if (competition.sport === "tennis") {
+    const homeScoreTip = parseScore(
+      formData.get("homeScoreTip"),
+      5,
+    );
+
+    const awayScoreTip = parseScore(
+      formData.get("awayScoreTip"),
+      5,
+    );
+
+    if (
+      homeScoreTip === null ||
+      awayScoreTip === null
+    ) {
+      return new NextResponse(
+        "Zadej platný počet setů od 0 do 5.",
+        {
+          status: 400,
+        },
+      );
+    }
+
+    if (homeScoreTip === awayScoreTip) {
+      return new NextResponse(
+        "Tenisový zápas nemůže skončit remízou na sety.",
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const winner =
+      homeScoreTip > awayScoreTip
+        ? "home"
+        : "away";
+
+    const { error: saveError } = await supabase
+      .from("tips")
+      .upsert(
+        {
+          match_id: matchId,
+          competition_member_id: member.id,
+
+          winner,
+          home_score_tip: homeScoreTip,
+          away_score_tip: awayScoreTip,
+
+          margin_bucket: null,
+          points: 0,
+        },
+        {
+          onConflict: "match_id,competition_member_id",
+        },
+      );
+
+    if (saveError) {
+      return new NextResponse(
+        `Tip se nepodařilo uložit: ${saveError.message}`,
+        {
+          status: 500,
+        },
+      );
+    }
+  }
+
+  /*
+   * BASKETBAL
+   */
+  else if (competition.sport === "basketball") {
     const winner = parseWinner(
       formData.get("winner"),
     );
@@ -263,6 +345,13 @@ export async function POST(
         },
       );
     }
+  } else {
+    return new NextResponse(
+      "Tento sport zatím není podporován.",
+      {
+        status: 400,
+      },
+    );
   }
 
   revalidatePath(`/souteze/${competitionId}/tipy`);

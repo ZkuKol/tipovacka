@@ -49,9 +49,7 @@ function isValidMatch(match: unknown): match is MatchToSave {
 }
 
 function normalizeTeamName(value: string) {
-  return value
-    .trim()
-    .toLocaleLowerCase("cs-CZ");
+  return value.trim().toLocaleLowerCase("cs-CZ");
 }
 
 export async function POST(
@@ -76,12 +74,14 @@ export async function POST(
     let body: SaveBulkMatchesRequest;
 
     try {
-      body = (await request.json()) as SaveBulkMatchesRequest;
+      body =
+        (await request.json()) as SaveBulkMatchesRequest;
     } catch {
       return NextResponse.json(
         {
           success: false,
-          message: "Požadavek neobsahuje platná JSON data.",
+          message:
+            "Požadavek neobsahuje platná JSON data.",
         },
         {
           status: 400,
@@ -91,11 +91,15 @@ export async function POST(
 
     const matches = body.matches;
 
-    if (!Array.isArray(matches) || matches.length === 0) {
+    if (
+      !Array.isArray(matches) ||
+      matches.length === 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Nejsou žádné zápasy k uložení.",
+          message:
+            "Nejsou žádné zápasy k uložení.",
         },
         {
           status: 400,
@@ -103,9 +107,10 @@ export async function POST(
       );
     }
 
-    const invalidMatchIndex = matches.findIndex(
-      (match) => !isValidMatch(match),
-    );
+    const invalidMatchIndex =
+      matches.findIndex(
+        (match) => !isValidMatch(match),
+      );
 
     if (invalidMatchIndex !== -1) {
       return NextResponse.json(
@@ -132,7 +137,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: "Pro uložení zápasů se musíš přihlásit.",
+          message:
+            "Pro uložení zápasů se musíš přihlásit.",
         },
         {
           status: 401,
@@ -140,20 +146,24 @@ export async function POST(
       );
     }
 
-    const { data: teamsData, error: teamsError } = await supabase
-      .from("teams")
-      .select("id, name_cs");
+    /*
+     * Načteme sport soutěže.
+     * Podle něj upravíme terminologii pro tenis.
+     */
+    const {
+      data: competition,
+      error: competitionError,
+    } = await supabase
+      .from("competitions")
+      .select("id, sport")
+      .eq("id", competitionId)
+      .maybeSingle();
 
-    if (teamsError) {
-      console.error(
-        "Chyba při načítání týmů:",
-        teamsError,
-      );
-
+    if (competitionError) {
       return NextResponse.json(
         {
           success: false,
-          message: `Nepodařilo se načíst týmy: ${teamsError.message}`,
+          message: `Nepodařilo se načíst soutěž: ${competitionError.message}`,
         },
         {
           status: 500,
@@ -161,7 +171,56 @@ export async function POST(
       );
     }
 
-    const teams = (teamsData ?? []) as Team[];
+    if (!competition) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Soutěž nebyla nalezena.",
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    const isTennis =
+      competition.sport === "tennis";
+
+    const firstParticipantLabel =
+      isTennis ? "hráč 1" : "domácí tým";
+
+    const secondParticipantLabel =
+      isTennis ? "hráč 2" : "hostující tým";
+
+    const participantDatabaseLabel =
+      isTennis ? "hráčů" : "týmů";
+
+    const {
+      data: teamsData,
+      error: teamsError,
+    } = await supabase
+      .from("teams")
+      .select("id, name_cs");
+
+    if (teamsError) {
+      console.error(
+        "Chyba při načítání účastníků:",
+        teamsError,
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Nepodařilo se načíst účastníky: ${teamsError.message}`,
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+
+    const teams =
+      (teamsData ?? []) as Team[];
 
     const teamsByName = new Map(
       teams.map((team) => [
@@ -172,7 +231,11 @@ export async function POST(
 
     const matchesToInsert = [];
 
-    for (let index = 0; index < matches.length; index += 1) {
+    for (
+      let index = 0;
+      index < matches.length;
+      index += 1
+    ) {
       const match = matches[index];
 
       const homeTeam = teamsByName.get(
@@ -187,9 +250,11 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            message: `Řádek ${index + 1}: domácí tým „${
+            message: `Řádek ${
+              index + 1
+            }: ${firstParticipantLabel} „${
               match.homeTeam
-            }“ nebyl nalezen v databázi týmů.`,
+            }“ nebyl nalezen v databázi ${participantDatabaseLabel}.`,
           },
           {
             status: 400,
@@ -201,9 +266,11 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            message: `Řádek ${index + 1}: hostující tým „${
+            message: `Řádek ${
+              index + 1
+            }: ${secondParticipantLabel} „${
               match.awayTeam
-            }“ nebyl nalezen v databázi týmů.`,
+            }“ nebyl nalezen v databázi ${participantDatabaseLabel}.`,
           },
           {
             status: 400,
@@ -215,9 +282,13 @@ export async function POST(
         return NextResponse.json(
           {
             success: false,
-            message: `Řádek ${
-              index + 1
-            }: domácí a hostující tým nemohou být stejné.`,
+            message: isTennis
+              ? `Řádek ${
+                  index + 1
+                }: hráč nemůže hrát sám proti sobě.`
+              : `Řádek ${
+                  index + 1
+                }: domácí a hostující tým nemohou být stejné.`,
           },
           {
             status: 400,
@@ -226,20 +297,26 @@ export async function POST(
       }
 
       matchesToInsert.push({
-        competition_id: competitionId,
-        round: match.round.trim(),
-        home_team_id: homeTeam.id,
-        away_team_id: awayTeam.id,
-        match_time: match.matchTime,
+        competition_id:
+          competitionId,
+        round:
+          match.round.trim(),
+        home_team_id:
+          homeTeam.id,
+        away_team_id:
+          awayTeam.id,
+        match_time:
+          match.matchTime,
         home_score: null,
         away_score: null,
         finished: false,
       });
     }
 
-    const { error: insertError } = await supabase
-      .from("matches")
-      .insert(matchesToInsert);
+    const { error: insertError } =
+      await supabase
+        .from("matches")
+        .insert(matchesToInsert);
 
     if (insertError) {
       console.error(
@@ -250,7 +327,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message: insertError.message,
+          message:
+            insertError.message,
         },
         {
           status: 500,
@@ -262,7 +340,8 @@ export async function POST(
       {
         success: true,
         message: `Bylo uloženo ${matches.length} zápasů.`,
-        insertedCount: matches.length,
+        insertedCount:
+          matches.length,
       },
       {
         status: 201,

@@ -17,9 +17,14 @@ function normalizeTeamName(value: string) {
   return value.trim().toLocaleLowerCase("cs");
 }
 
-export function validateRows(rows: BulkMatch[]): ValidationError[] {
+export function validateRows(
+  rows: BulkMatch[],
+  sport: string,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const duplicateKeys = new Map<string, string[]>();
+
+  const isTennis = sport === "tennis";
 
   for (const row of rows) {
     const homeTeam = row.homeTeam.trim();
@@ -31,7 +36,9 @@ export function validateRows(rows: BulkMatch[]): ValidationError[] {
       errors.push({
         rowId: row.id,
         field: "homeTeam",
-        message: "Domácí tým je povinný.",
+        message: isTennis
+          ? "Hráč 1 je povinný."
+          : "Domácí tým je povinný.",
       });
     }
 
@@ -39,7 +46,9 @@ export function validateRows(rows: BulkMatch[]): ValidationError[] {
       errors.push({
         rowId: row.id,
         field: "awayTeam",
-        message: "Hostující tým je povinný.",
+        message: isTennis
+          ? "Hráč 2 je povinný."
+          : "Hostující tým je povinný.",
       });
     }
 
@@ -67,7 +76,9 @@ export function validateRows(rows: BulkMatch[]): ValidationError[] {
       errors.push({
         rowId: row.id,
         field: "awayTeam",
-        message: "Domácí a hostující tým nesmí být stejné.",
+        message: isTennis
+          ? "Hráč 1 a Hráč 2 nesmí být stejní."
+          : "Domácí a hostující tým nesmí být stejné.",
       });
     }
 
@@ -79,9 +90,15 @@ export function validateRows(rows: BulkMatch[]): ValidationError[] {
         time,
       ].join("|");
 
-      const matchingRowIds = duplicateKeys.get(duplicateKey) ?? [];
+      const matchingRowIds =
+        duplicateKeys.get(duplicateKey) ?? [];
+
       matchingRowIds.push(row.id);
-      duplicateKeys.set(duplicateKey, matchingRowIds);
+
+      duplicateKeys.set(
+        duplicateKey,
+        matchingRowIds,
+      );
     }
   }
 
@@ -94,13 +111,15 @@ export function validateRows(rows: BulkMatch[]): ValidationError[] {
       errors.push({
         rowId,
         field: "homeTeam",
-        message: "Tento zápas je v seznamu vícekrát.",
+        message:
+          "Tento zápas je v seznamu vícekrát.",
       });
 
       errors.push({
         rowId,
         field: "awayTeam",
-        message: "Tento zápas je v seznamu vícekrát.",
+        message:
+          "Tento zápas je v seznamu vícekrát.",
       });
     }
   }
@@ -114,6 +133,8 @@ export function getFieldError(
   field: BulkMatchField,
 ) {
   return errors.find(
-    (error) => error.rowId === rowId && error.field === field,
+    (error) =>
+      error.rowId === rowId &&
+      error.field === field,
   );
 }

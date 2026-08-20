@@ -1,4 +1,6 @@
+import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import BulkMatchesEditor from "./BulkMatchesEditor";
 
 type BulkMatchesPageProps = {
@@ -11,6 +13,18 @@ export default async function BulkMatchesPage({
   params,
 }: BulkMatchesPageProps) {
   const { id } = await params;
+
+  const supabase = await createClient();
+
+  const { data: competition, error } = await supabase
+    .from("competitions")
+    .select("id, sport")
+    .eq("id", id)
+    .single();
+
+  if (error || !competition) {
+    notFound();
+  }
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8">
@@ -27,12 +41,14 @@ export default async function BulkMatchesPage({
         </h1>
 
         <p className="mt-2 text-sm text-gray-600">
-            Přidej více zápasů najednou ručně nebo vložením z Excelu.
+          Přidej více zápasů najednou ručně nebo vložením z Excelu.
         </p>
       </div>
 
-      <BulkMatchesEditor competitionId={id} />
+      <BulkMatchesEditor
+        competitionId={id}
+        sport={competition.sport}
+      />
     </main>
   );
 }
-

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import PaymentQrReader from "./PaymentQrReader";
+import SportRulesSelector from "./SportRulesSelector";
 
 type CompetitionSettingsPageProps = {
   params: Promise<{
@@ -10,35 +11,39 @@ type CompetitionSettingsPageProps = {
   }>;
 };
 
-function getRulesForSport(sport: string) {
-  if (sport === "basketball") {
-    return [
-      "Tipuje se vítěz zápasu a pásmo výsledného rozdílu.",
-      "Správný vítěz = 1 bod.",
-      "Správný vítěz a správné pásmo rozdílu = 5 bodů.",
-      "Špatný vítěz = 0 bodů.",
-    ];
+type WinnerOption = {
+  id: string;
+  name: string;
+};
+
+function formatDeadlineForInput(value: string | null) {
+  if (!value) {
+    return "";
   }
 
-  if (sport === "football" || sport === "hockey") {
-    return [
-      "Tipuje se přesný konečný výsledek.",
-      "Přesný výsledek = 3 body.",
-      "Správný vítěz nebo správně tipnutá remíza = 1 bod.",
-      "Jiný výsledek = 0 bodů.",
-    ];
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
   }
 
-  if (sport === "tennis") {
-    return [
-      "Tipuje se vítěz zápasu a výsledek na sety.",
-      "Správný vítěz = 1 bod.",
-      "Správný vítěz a přesný výsledek na sety = 2 body.",
-      "Špatný vítěz = 0 bodů.",
-    ];
-  }
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 
-  return [];
+  const parts = formatter.formatToParts(date);
+
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
 }
 
 export default async function CompetitionSettingsPage({
@@ -58,6 +63,8 @@ export default async function CompetitionSettingsPage({
         title,
         sport,
         predict_overall_winner,
+        overall_winner_deadline,
+        overall_winner_option_id,
         description,
         entry_fee,
         payment_account,
@@ -73,7 +80,23 @@ export default async function CompetitionSettingsPage({
     notFound();
   }
 
-  const rules = getRulesForSport(competition.sport);
+  const {
+    data: winnerOptionsData,
+    error: winnerOptionsError,
+  } = await supabase
+    .from("competition_winner_options")
+    .select("id, name")
+    .eq("competition_id", id)
+    .order("name", { ascending: true });
+
+  if (winnerOptionsError) {
+    throw new Error(
+      `Nepodařilo se načíst možné vítěze: ${winnerOptionsError.message}`,
+    );
+  }
+
+  const winnerOptions =
+    (winnerOptionsData ?? []) as WinnerOption[];
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -94,64 +117,111 @@ export default async function CompetitionSettingsPage({
         className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
       >
         <div className="space-y-6">
-          <div>
-            <label
-              htmlFor="sport"
-              className="mb-2 block text-sm font-bold text-gray-700"
-            >
-              Sport
-            </label>
+          <SportRulesSelector
+            initialSport={competition.sport}
+            initialPredictOverallWinner={
+              competition.predict_overall_winner
+            }
+          />
 
-            <select
-              id="sport"
-              name="sport"
-              defaultValue={competition.sport}
-              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-            >
-              <option value="basketball">Basketbal</option>
-              <option value="football">Fotbal</option>
-              <option value="hockey">Hokej</option>
-              <option value="tennis">Tenis</option>
-            </select>
+          <div className="rounded-2xl border border-orange-200 bg-orange-50 p-5">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">
+                Celkový vítěz soutěže
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-600">
+                Tato část se použije, pokud je nahoře zapnuté
+                tipování celkového vítěze za 10 bodů.
+              </p>
+            </div>
+
+            <div className="mt-5">
+              <label
+                htmlFor="overallWinnerDeadline"
+                className="mb-2 block text-sm font-bold text-gray-700"
+              >
+                Uzávěrka tipu na celkového vítěze
+              </label>
+
+              <input
+                id="overallWinnerDeadline"
+                name="overallWinnerDeadline"
+                type="datetime-local"
+                defaultValue={formatDeadlineForInput(
+                  competition.overall_winner_deadline,
+                )}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+              />
+
+              <p className="mt-2 text-xs text-gray-500">
+                Po tomto termínu už hráč nebude moci svůj tip změnit.
+              </p>
+            </div>
+
+            <div className="mt-5">
+              <label
+                htmlFor="winnerOptions"
+                className="mb-2 block text-sm font-bold text-gray-700"
+              >
+                Možní vítězové
+              </label>
+
+              <textarea
+                id="winnerOptions"
+                name="winnerOptions"
+                rows={10}
+                defaultValue={winnerOptions
+                  .map((option) => option.name)
+                  .join("\n")}
+                placeholder={`Česko
+USA
+Srbsko
+Francie`}
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+              />
+
+              <p className="mt-2 text-xs text-gray-500">
+                Každého možného vítěze napiš na samostatný řádek.
+              </p>
+            </div>
+
+            <div className="mt-5">
+              <label
+                htmlFor="overallWinnerOptionId"
+                className="mb-2 block text-sm font-bold text-gray-700"
+              >
+                Skutečný vítěz
+              </label>
+
+              <select
+                id="overallWinnerOptionId"
+                name="overallWinnerOptionId"
+                defaultValue={
+                  competition.overall_winner_option_id ?? ""
+                }
+                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+              >
+                <option value="">
+                  Zatím neurčeno
+                </option>
+
+                {winnerOptions.map((option) => (
+                  <option
+                    key={option.id}
+                    value={option.id}
+                  >
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+
+              <p className="mt-2 text-xs text-gray-500">
+                Vyber až po skončení soutěže. Správné tipy
+                dostanou 10 bodů, ostatní 0.
+              </p>
+            </div>
           </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-            <p className="text-sm font-bold text-gray-900">
-              Pravidla podle sportu
-            </p>
-
-            <ul className="mt-3 space-y-2 text-sm text-gray-700">
-              {rules.map((rule) => (
-                <li key={rule}>• {rule}</li>
-              ))}
-
-              {competition.predict_overall_winner && (
-                <li>
-                  • Správně tipnutý celkový vítěz soutěže = 10 bodů.
-                </li>
-              )}
-            </ul>
-          </div>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4">
-            <input
-              type="checkbox"
-              name="predictOverallWinner"
-              value="true"
-              defaultChecked={competition.predict_overall_winner}
-              className="mt-1 h-5 w-5 rounded border-gray-300"
-            />
-
-            <span>
-              <span className="block font-bold text-gray-900">
-                Tipuje se celkový vítěz soutěže
-              </span>
-
-              <span className="mt-1 block text-sm text-gray-600">
-                Za správný tip získá hráč 10 bodů.
-              </span>
-            </span>
-          </label>
 
           <div>
             <label
@@ -264,7 +334,7 @@ export default async function CompetitionSettingsPage({
 
             <p className="mt-1 text-sm text-gray-600">
               Nahraj QR kód vygenerovaný bankovní aplikací.
-              Platební údaje se z něj pokusíme automaticky načíst.
+              Platební údaje se z něj automaticky načtou.
             </p>
 
             {competition.payment_qr_url && (

@@ -40,6 +40,17 @@ export default async function MatchResultPage({
     redirect("/prihlaseni");
   }
 
+  const { data: competition, error: competitionError } =
+    await supabase
+      .from("competitions")
+      .select("id, sport")
+      .eq("id", id)
+      .single();
+
+  if (competitionError || !competition) {
+    notFound();
+  }
+
   const { data, error } = await supabase
     .from("matches")
     .select(
@@ -84,6 +95,7 @@ export default async function MatchResultPage({
   return (
     <MatchResultForm
       competitionId={id}
+      sport={competition.sport}
       match={{
         id: match.id,
         homeTeam: homeTeamLabel,

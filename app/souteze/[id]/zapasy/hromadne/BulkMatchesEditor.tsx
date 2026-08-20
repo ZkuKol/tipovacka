@@ -18,6 +18,7 @@ export type BulkMatch = {
 
 type BulkMatchesEditorProps = {
   competitionId: string;
+  sport: string;
 };
 
 type SaveBulkMatchesResponse = {
@@ -74,7 +75,9 @@ function normalizeTime(value: string): string {
     return "";
   }
 
-  const timeMatch = trimmedValue.match(/^(\d{1,2}):(\d{2})/);
+  const timeMatch = trimmedValue.match(
+    /^(\d{1,2}):(\d{2})/,
+  );
 
   if (!timeMatch) {
     return trimmedValue;
@@ -85,7 +88,9 @@ function normalizeTime(value: string): string {
   return `${hours.padStart(2, "0")}:${minutes}`;
 }
 
-function createRowsFromClipboard(text: string): BulkMatch[] {
+function createRowsFromClipboard(
+  text: string,
+): BulkMatch[] {
   const pastedRows = text
     .trim()
     .split(/\r?\n/)
@@ -105,28 +110,58 @@ function createRowsFromClipboard(text: string): BulkMatch[] {
   });
 }
 
-function createMatchTime(date: string, time: string): string {
-  const localDate = new Date(`${date}T${time}:00`);
+function createMatchTime(
+  date: string,
+  time: string,
+): string {
+  const localDate = new Date(
+    `${date}T${time}:00`,
+  );
 
   return localDate.toISOString();
 }
 
 export default function BulkMatchesEditor({
   competitionId,
+  sport,
 }: BulkMatchesEditorProps) {
   const router = useRouter();
 
-  const [rows, setRows] = useState<BulkMatch[]>([createEmptyRow()]);
-  const [message, setMessage] = useState("");
-  const [showErrors, setShowErrors] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSucceeded, setSaveSucceeded] = useState(false);
+  const isTennis = sport === "tennis";
 
-  const validationErrors = showErrors ? validateRows(rows) : [];
-  const hasErrors = validationErrors.length > 0;
+  const firstParticipantLabel = isTennis
+    ? "Hráč 1"
+    : "Domácí";
+
+  const secondParticipantLabel = isTennis
+    ? "Hráč 2"
+    : "Hosté";
+
+  const [rows, setRows] = useState<BulkMatch[]>([
+    createEmptyRow(),
+  ]);
+
+  const [message, setMessage] = useState("");
+  const [showErrors, setShowErrors] =
+    useState(false);
+  const [isSaving, setIsSaving] =
+    useState(false);
+  const [saveSucceeded, setSaveSucceeded] =
+    useState(false);
+
+  const validationErrors = showErrors
+    ? validateRows(rows, sport)
+    : [];
+
+  const hasErrors =
+    validationErrors.length > 0;
 
   function addRow() {
-    setRows((currentRows) => [...currentRows, createEmptyRow()]);
+    setRows((currentRows) => [
+      ...currentRows,
+      createEmptyRow(),
+    ]);
+
     setMessage("");
     setSaveSucceeded(false);
   }
@@ -157,23 +192,32 @@ export default function BulkMatchesEditor({
         return [createEmptyRow()];
       }
 
-      return currentRows.filter((row) => row.id !== rowId);
+      return currentRows.filter(
+        (row) => row.id !== rowId,
+      );
     });
 
     setMessage("");
     setSaveSucceeded(false);
   }
 
-  function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
-    const clipboardText = event.clipboardData.getData("text");
+  function handlePaste(
+    event: ClipboardEvent<HTMLDivElement>,
+  ) {
+    const clipboardText =
+      event.clipboardData.getData("text");
 
-    if (!clipboardText.includes("\t") && !clipboardText.includes("\n")) {
+    if (
+      !clipboardText.includes("\t") &&
+      !clipboardText.includes("\n")
+    ) {
       return;
     }
 
     event.preventDefault();
 
-    const pastedRows = createRowsFromClipboard(clipboardText);
+    const pastedRows =
+      createRowsFromClipboard(clipboardText);
 
     if (pastedRows.length === 0) {
       return;
@@ -185,13 +229,16 @@ export default function BulkMatchesEditor({
 
     setMessage(
       `Načteno ${pastedRows.length} ${
-        pastedRows.length === 1 ? "řádek" : "řádků"
+        pastedRows.length === 1
+          ? "řádek"
+          : "řádků"
       } ze schránky.`,
     );
   }
 
   async function handleSave() {
-    const errors = validateRows(rows);
+    const errors =
+      validateRows(rows, sport);
 
     setShowErrors(true);
     setSaveSucceeded(false);
@@ -199,7 +246,9 @@ export default function BulkMatchesEditor({
     if (errors.length > 0) {
       setMessage(
         `Seznam obsahuje ${errors.length} ${
-          errors.length === 1 ? "chybu" : "chyb"
+          errors.length === 1
+            ? "chybu"
+            : "chyb"
         }. Oprav zvýrazněná pole.`,
       );
 
@@ -210,19 +259,25 @@ export default function BulkMatchesEditor({
     setMessage("Ukládám zápasy…");
 
     try {
-      const matchesToSave = rows.map((row) => ({
-        round: row.round,
-        homeTeam: row.homeTeam,
-        awayTeam: row.awayTeam,
-        matchTime: createMatchTime(row.date, row.time),
-      }));
+      const matchesToSave = rows.map(
+        (row) => ({
+          round: row.round,
+          homeTeam: row.homeTeam,
+          awayTeam: row.awayTeam,
+          matchTime: createMatchTime(
+            row.date,
+            row.time,
+          ),
+        }),
+      );
 
       const response = await fetch(
         `/api/competitions/${competitionId}/matches/bulk`,
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             matches: matchesToSave,
@@ -233,7 +288,8 @@ export default function BulkMatchesEditor({
       let result: SaveBulkMatchesResponse;
 
       try {
-        result = (await response.json()) as SaveBulkMatchesResponse;
+        result =
+          (await response.json()) as SaveBulkMatchesResponse;
       } catch {
         setMessage(
           "Server vrátil neplatnou odpověď. Zkontroluj API Route.",
@@ -241,9 +297,13 @@ export default function BulkMatchesEditor({
         return;
       }
 
-      if (!response.ok || !result.success) {
+      if (
+        !response.ok ||
+        !result.success
+      ) {
         setMessage(
-          result.message || "Zápasy se nepodařilo uložit.",
+          result.message ||
+            "Zápasy se nepodařilo uložit.",
         );
         return;
       }
@@ -252,11 +312,16 @@ export default function BulkMatchesEditor({
       setMessage(result.message);
 
       window.setTimeout(() => {
-        router.push(`/souteze/${competitionId}/zapasy`);
+        router.push(
+          `/souteze/${competitionId}/zapasy`,
+        );
         router.refresh();
       }, 1500);
     } catch (error) {
-      console.error("Chyba při ukládání zápasů:", error);
+      console.error(
+        "Chyba při ukládání zápasů:",
+        error,
+      );
 
       setMessage(
         "Nepodařilo se spojit se serverem. Zkus to prosím znovu.",
@@ -280,12 +345,15 @@ export default function BulkMatchesEditor({
     >
       <div className="border-b border-gray-200 bg-blue-50 px-4 py-3">
         <p className="text-sm text-blue-900">
-          Zkopíruj řádky z Excelu a vlož je pomocí{" "}
-          <strong>Ctrl + V</strong>.
+          Zkopíruj řádky z Excelu a vlož je
+          pomocí <strong>Ctrl + V</strong>.
         </p>
 
         <p className="mt-1 text-xs text-blue-700">
-          Pořadí sloupců: Skupina, Domácí, Hosté, Datum, Čas.
+          Pořadí sloupců: Skupina,{" "}
+          {firstParticipantLabel},{" "}
+          {secondParticipantLabel}, Datum,
+          Čas.
         </p>
       </div>
 
@@ -302,11 +370,11 @@ export default function BulkMatchesEditor({
               </th>
 
               <th className="px-3 py-3 text-sm font-semibold">
-                Domácí
+                {firstParticipantLabel}
               </th>
 
               <th className="px-3 py-3 text-sm font-semibold">
-                Hosté
+                {secondParticipantLabel}
               </th>
 
               <th className="w-44 px-3 py-3 text-sm font-semibold">
@@ -329,6 +397,7 @@ export default function BulkMatchesEditor({
                 key={row.id}
                 row={row}
                 rowNumber={index + 1}
+                sport={sport}
                 errors={validationErrors}
                 onChange={updateRow}
                 onRemove={removeRow}
@@ -367,14 +436,18 @@ export default function BulkMatchesEditor({
           <button
             type="button"
             onClick={handleSave}
-            disabled={isSaving || saveSucceeded}
+            disabled={
+              isSaving ||
+              saveSucceeded
+            }
             className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
           >
-            {isSaving ? "Ukládám…" : "Uložit všechny"}
+            {isSaving
+              ? "Ukládám…"
+              : "Uložit všechny"}
           </button>
         </div>
       </div>
     </section>
   );
 }
-
